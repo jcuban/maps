@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blank Map Labeler</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#eceff1;color:#263238;height:100vh;display:flex;flex-direction:column}
+
+/* ── Header ── */
+header{background:#1a237e;color:#fff;padding:14px 24px;flex-shrink:0;display:flex;align-items:baseline;gap:12px}
+header h1{font-size:1.25rem;font-weight:700;letter-spacing:.02em}
+header p{font-size:.8rem;opacity:.75}
+
+/* ── Layout ── */
+.main{display:flex;flex:1;min-height:0}
+.sidebar{width:390px;min-width:390px;background:#fff;overflow-y:auto;border-right:1px solid #cfd8dc;display:flex;flex-direction:column}
+.sidebar-inner{padding:18px;flex:1}
+.preview-pane{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px;overflow:auto}
+
+/* ── Cards / Steps ── */
+.card{border:1px solid #cfd8dc;border-radius:10px;margin-bottom:14px;overflow:hidden}
+.card-head{background:#f5f7fa;padding:11px 14px;display:flex;align-items:center;gap:10px;font-weight:600;font-size:.87rem;border-bottom:1px solid #cfd8dc}
+.badge{width:22px;height:22px;border-radius:50%;background:#37474f;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0}
+.badge.ok{background:#2e7d32}
+.card-body{padding:14px}
+
+/* ── Upload ── */
+.drop-zone{border:2px dashed #b0bec5;border-radius:8px;padding:28px 16px;text-align:center;cursor:pointer;transition:.2s}
+.drop-zone:hover,.drop-zone.over{border-color:#1565c0;background:#e3f2fd}
+.drop-zone.has-file{border-color:#2e7d32;background:#e8f5e9}
+.drop-zone svg{display:block;margin:0 auto 8px}
+.drop-zone p{font-size:.82rem;color:#607d8b}
+.drop-zone p strong{color:#263238}
+
+/* ── Form elements ── */
+label{display:block;font-size:.79rem;font-weight:600;color:#546e7a;margin-bottom:3px;margin-top:11px}
+label:first-child{margin-top:0}
+input[type=number],input[type=text],select,textarea{width:100%;padding:7px 10px;border:1px solid #cfd8dc;border-radius:6px;font-size:.85rem;font-family:inherit;color:#263238;transition:.15s}
+input[type=number]:focus,input[type=text]:focus,select:focus,textarea:focus{outline:none;border-color:#1565c0;box-shadow:0 0 0 3px rgba(21,101,192,.12)}
+textarea{resize:vertical;min-height:110px;font-family:'SFMono-Regular',Consolas,monospace;font-size:.82rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* ── Buttons ── */
+.btn{padding:8px 14px;border:none;border-radius:7px;font-size:.84rem;font-weight:600;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:#1565c0;color:#fff}
+.btn-primary:not(:disabled):hover{background:#0d47a1}
+.btn-ghost{background:#eceff1;color:#455a64}
+.btn-ghost:not(:disabled):hover{background:#cfd8dc}
+.btn-green{background:#2e7d32;color:#fff;width:100%;justify-content:center;padding:11px;font-size:.9rem;margin-top:4px}
+.btn-green:not(:disabled):hover{background:#1b5e20}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+
+/* ── Place list ── */
+.place-list{display:flex;flex-direction:column;gap:4px;margin-top:10px;max-height:230px;overflow-y:auto}
+.place-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #eceff1;border-radius:6px;font-size:.82rem;background:#fafafa}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.dot-ok{background:#43a047}
+.dot-miss{background:#e53935}
+.place-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.place-coords{font-family:monospace;font-size:.74rem;color:#78909c;white-space:nowrap}
+.btn-xs{padding:3px 7px;font-size:.73rem;border-radius:4px}
+
+/* ── Feedback banner ── */
+.info{background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:8px 11px;font-size:.79rem;color:#1565c0;margin-bottom:10px}
+.warn{background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:8px 11px;font-size:.79rem;color:#e65100;margin-top:8px}
+
+/* ── Spinner ── */
+.spin-wrap{display:flex;align-items:center;gap:8px;font-size:.82rem;color:#78909c;margin-top:8px}
+.spinner{width:15px;height:15px;border:2px solid #cfd8dc;border-top-color:#1565c0;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Color row ── */
+.color-row{display:flex;gap:10px}
+.color-row>div{flex:1}
+input[type=color]{height:34px;padding:2px 4px;cursor:pointer;width:100%;border-radius:6px}
+
+/* ── Preview ── */
+.preview-img-wrap{background:#fff;border-radius:10px;box-shadow:0 3px 16px rgba(0,0,0,.12);overflow:hidden;max-width:100%;max-height:calc(100vh - 160px)}
+.preview-img-wrap img{display:block;max-width:100%;max-height:calc(100vh - 160px)}
+.preview-empty{text-align:center;color:#b0bec5}
+.preview-empty svg{width:72px;height:72px;margin-bottom:10px;opacity:.4}
+.preview-empty p{font-size:.88rem}
+.dl-row{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.stats-txt{font-size:.8rem;color:#546e7a}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Blank Map Labeler</h1>
+  <p>Upload a map &rarr; set bounds &rarr; enter places &rarr; download labeled map</p>
+</header>
+
+<div class="main">
+
+  <!-- ── Sidebar ── -->
+  <div class="sidebar">
+    <div class="sidebar-inner">
+
+      <!-- Step 1: Upload -->
+      <div class="card">
+        <div class="card-head"><span class="badge" id="b1">1</span> Upload Map Image</div>
+        <div class="card-body">
+          <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-in').click()">
+            <input type="file" id="file-in" accept="image/*" style="display:none" onchange="onFileChange(this)">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#90a4ae" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            </svg>
+            <p id="drop-txt">Click to upload or drag &amp; drop<br>PNG, JPG, GIF, WEBP</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Bounds -->
+      <div class="card">
+        <div class="card-head"><span class="badge" id="b2">2</span> Geographic Bounds</div>
+        <div class="card-body">
+          <div class="info">Tell us the lat/lon boundaries of your map so coordinates can be placed correctly.</div>
+          <label>Quick Region Preset</label>
+          <select onchange="applyPreset(this.value)">
+            <option value="">— choose a region —</option>
+            <option value="world">World</option>
+            <option value="usa">United States (lower 48)</option>
+            <option value="europe">Europe</option>
+            <option value="africa">Africa</option>
+            <option value="asia">Asia</option>
+            <option value="south_america">South America</option>
+            <option value="north_america">North America</option>
+            <option value="australia">Australia</option>
+            <option value="middle_east">Middle East</option>
+            <option value="canada">Canada</option>
+            <option value="uk">United Kingdom</option>
+          </select>
+          <div class="grid2" style="margin-top:10px">
+            <div>
+              <label>North (max lat)</label>
+              <input type="number" id="max-lat" placeholder="e.g. 49.5" step="0.1" min="-90" max="90" oninput="onBoundsChange()">
+            </div>
+            <div>
+              <label>South (min lat)</label>
+              <input type="number" id="min-lat" placeholder="e.g. 24.5" step="0.1" min="-90" max="90" oninput="onBoundsChange()">
+            </div>
+            <div>
+              <label>West (min lon)</label>
+              <input type="number" id="min-lon" placeholder="e.g. -125" step="0.1" min="-180" max="180" oninput="onBoundsChange()">
+            </div>
+            <div>
+              <label>East (max lon)</label>
+              <input type="number" id="max-lon" placeholder="e.g. -66" step="0.1" min="-180" max="180" oninput="onBoundsChange()">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Places -->
+      <div class="card">
+        <div class="card-head"><span class="badge" id="b3">3</span> Places to Label</div>
+        <div class="card-body">
+          <label>Place names — one per line</label>
+          <textarea id="places-input" placeholder="Paris, France&#10;London, England&#10;Tokyo, Japan&#10;New York City&#10;Sydney, Australia"></textarea>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="geo-btn" onclick="geocodePlaces()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              Geocode Places
+            </button>
+            <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+          </div>
+          <div id="geo-status"></div>
+          <div id="place-list"></div>
+          <div id="manual-add-area" style="display:none;margin-top:10px">
+            <label>Add place manually (name, lat, lon)</label>
+            <div style="display:flex;gap:6px">
+              <input type="text" id="m-name" placeholder="Place name" style="flex:2">
+              <input type="number" id="m-lat" placeholder="Lat" step="0.0001" style="flex:1">
+              <input type="number" id="m-lon" placeholder="Lon" step="0.0001" style="flex:1">
+              <button class="btn btn-ghost" onclick="addManual()">Add</button>
+            </div>
+          </div>
+          <button class="btn btn-ghost" style="margin-top:8px;font-size:.76rem" onclick="toggleManual()">+ Add place manually</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Style -->
+      <div class="card">
+        <div class="card-head"><span class="badge" id="b4">4</span> Style Options</div>
+        <div class="card-body">
+          <div class="color-row">
+            <div><label>Dot Color</label><input type="color" id="dot-color" value="#dc3232"></div>
+            <div><label>Label Color</label><input type="color" id="text-color" value="#1a1a1a"></div>
+          </div>
+          <div class="grid2">
+            <div><label>Font Size (px)</label><input type="number" id="font-size" value="14" min="8" max="64"></div>
+            <div><label>Dot Radius (px)</label><input type="number" id="dot-size" value="5" min="2" max="25"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generate -->
+      <button class="btn btn-green" id="gen-btn" disabled onclick="generate()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Generate Labeled Map
+      </button>
+
+    </div><!-- /sidebar-inner -->
+  </div><!-- /sidebar -->
+
+  <!-- ── Preview pane ── -->
+  <div class="preview-pane">
+    <div id="preview-slot">
+      <div class="preview-empty">
+        <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="4" y="10" width="56" height="38" rx="4"/>
+          <path d="M4 36l12-10 10 8 12-14 22 14"/>
+          <circle cx="46" cy="22" r="4"/>
+        </svg>
+        <p>Your labeled map will appear here</p>
+      </div>
+    </div>
+    <div id="dl-row" class="dl-row" style="display:none">
+      <button class="btn btn-primary" onclick="download()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Download PNG
+      </button>
+      <span id="stats-txt" class="stats-txt"></span>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let mapFile       = null;
+let geocoded      = {};        // { placeName: {found, lat, lon} }
+let generatedImg  = null;
+let manualVisible = false;
+
+// ── Presets ──────────────────────────────────────────────────────────────────
+const PRESETS = {
+  world:         {min_lat:-85,  max_lat:85,   min_lon:-180, max_lon:180},
+  usa:           {min_lat:24.5, max_lat:49.5, min_lon:-125, max_lon:-66},
+  europe:        {min_lat:34,   max_lat:72,   min_lon:-25,  max_lon:45},
+  africa:        {min_lat:-36,  max_lat:38,   min_lon:-20,  max_lon:55},
+  asia:          {min_lat:1,    max_lat:78,   min_lon:25,   max_lon:145},
+  south_america: {min_lat:-56,  max_lat:13,   min_lon:-82,  max_lon:-34},
+  north_america: {min_lat:14,   max_lat:73,   min_lon:-168, max_lon:-52},
+  australia:     {min_lat:-44,  max_lat:-10,  min_lon:113,  max_lon:154},
+  middle_east:   {min_lat:12,   max_lat:42,   min_lon:25,   max_lon:63},
+  canada:        {min_lat:42,   max_lat:83,   min_lon:-141, max_lon:-52},
+  uk:            {min_lat:49.5, max_lat:61,   min_lon:-8,   max_lon:2},
+};
+
+function applyPreset(key) {
+  if (!PRESETS[key]) return;
+  const p = PRESETS[key];
+  document.getElementById('min-lat').value = p.min_lat;
+  document.getElementById('max-lat').value = p.max_lat;
+  document.getElementById('min-lon').value = p.min_lon;
+  document.getElementById('max-lon').value = p.max_lon;
+  onBoundsChange();
+}
+
+// ── File upload ───────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+});
+
+function onFileChange(inp) { if (inp.files[0]) loadFile(inp.files[0]); }
+
+function loadFile(file) {
+  mapFile = file;
+  dropZone.classList.add('has-file');
+  document.getElementById('drop-txt').innerHTML = `<strong>${file.name}</strong><br>Click to change`;
+  document.getElementById('b1').classList.add('ok');
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('preview-slot').innerHTML =
+      `<div class="preview-img-wrap"><img src="${e.target.result}" alt="map preview"></div>`;
+  };
+  reader.readAsDataURL(file);
+  checkReady();
+}
+
+// ── Bounds ────────────────────────────────────────────────────────────────────
+function onBoundsChange() {
+  const filled = ['min-lat','max-lat','min-lon','max-lon'].every(id => document.getElementById(id).value !== '');
+  document.getElementById('b2').classList.toggle('ok', filled);
+  checkReady();
+}
+
+// ── Geocoding ─────────────────────────────────────────────────────────────────
+async function geocodePlaces() {
+  const raw    = document.getElementById('places-input').value;
+  const places = raw.split('\n').map(s => s.trim()).filter(Boolean);
+  if (!places.length) return;
+
+  const btn = document.getElementById('geo-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Geocoding…';
+
+  document.getElementById('geo-status').innerHTML =
+    `<div class="spin-wrap"><div class="spinner"></div> Looking up ${places.length} place${places.length>1?'s':''} — this respects rate limits so may take a moment…</div>`;
+  document.getElementById('place-list').innerHTML = '';
+
+  try {
+    const res  = await fetch('/geocode', {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({places}),
+    });
+    const data = await res.json();
+    // Merge with any existing manual entries
+    for (const [k, v] of Object.entries(data)) {
+      if (!geocoded[k] || !geocoded[k].found) geocoded[k] = v;
+    }
+    renderPlaces();
+  } catch(err) {
+    document.getElementById('geo-status').innerHTML =
+      `<div class="warn">Geocoding error: ${err.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Geocode Places';
+  checkReady();
+}
+
+function renderPlaces() {
+  const entries = Object.entries(geocoded);
+  if (!entries.length) { document.getElementById('place-list').innerHTML = ''; return; }
+
+  const found  = entries.filter(([,v]) => v.found).length;
+  const missed = entries.length - found;
+
+  let warn = '';
+  if (missed) warn = `<div class="warn">${missed} place${missed>1?'s':''} not found — use "Set coords" to add manually.</div>`;
+
+  const items = entries.map(([name, data]) => {
+    const dot    = data.found ? 'dot-ok' : 'dot-miss';
+    const coords = data.found ? `${data.lat.toFixed(2)}, ${data.lon.toFixed(2)}` : 'not found';
+    const manBtn = data.found ? '' : `<button class="btn btn-ghost btn-xs" onclick="promptManual('${esc(name)}')">Set coords</button>`;
+    const delBtn = `<button class="btn btn-ghost btn-xs" onclick="removeName('${esc(name)}')" title="Remove">✕</button>`;
+    return `<div class="place-item">
+      <span class="dot ${dot}"></span>
+      <span class="place-name" title="${esc(name)}">${name}</span>
+      <span class="place-coords">${coords}</span>
+      ${manBtn}${delBtn}
+    </div>`;
+  }).join('');
+
+  document.getElementById('geo-status').innerHTML =
+    `<div style="font-size:.79rem;color:#546e7a;margin-top:8px">${found} / ${entries.length} places geocoded</div>${warn}`;
+  document.getElementById('place-list').innerHTML = `<div class="place-list">${items}</div>`;
+  document.getElementById('b3').classList.toggle('ok', found > 0);
+}
+
+function esc(s) { return s.replace(/'/g,"&#39;").replace(/"/g,'&quot;'); }
+
+function removeName(name) {
+  delete geocoded[name];
+  renderPlaces();
+  checkReady();
+}
+
+function promptManual(name) {
+  const lat = prompt(`Latitude for "${name}":`);
+  const lon = prompt(`Longitude for "${name}":`);
+  if (lat !== null && lon !== null && !isNaN(+lat) && !isNaN(+lon)) {
+    geocoded[name] = {found: true, lat: +lat, lon: +lon};
+    renderPlaces();
+    checkReady();
+  }
+}
+
+function toggleManual() {
+  manualVisible = !manualVisible;
+  document.getElementById('manual-add-area').style.display = manualVisible ? 'block' : 'none';
+}
+
+function addManual() {
+  const name = document.getElementById('m-name').value.trim();
+  const lat  = parseFloat(document.getElementById('m-lat').value);
+  const lon  = parseFloat(document.getElementById('m-lon').value);
+  if (!name || isNaN(lat) || isNaN(lon)) { alert('Please fill in name, lat, and lon.'); return; }
+  geocoded[name] = {found: true, lat, lon};
+  document.getElementById('m-name').value = '';
+  document.getElementById('m-lat').value  = '';
+  document.getElementById('m-lon').value  = '';
+  renderPlaces();
+  checkReady();
+}
+
+function clearAll() {
+  geocoded = {};
+  document.getElementById('places-input').value = '';
+  document.getElementById('geo-status').innerHTML = '';
+  document.getElementById('place-list').innerHTML = '';
+  document.getElementById('b3').classList.remove('ok');
+  checkReady();
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+function checkReady() {
+  const hasFile   = mapFile !== null;
+  const hasBounds = ['min-lat','max-lat','min-lon','max-lon'].every(id => document.getElementById(id).value !== '');
+  const hasPlaces = Object.values(geocoded).some(v => v.found);
+  document.getElementById('gen-btn').disabled = !(hasFile && hasBounds && hasPlaces);
+}
+
+async function generate() {
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Rendering…';
+
+  const bounds = {
+    min_lat: +document.getElementById('min-lat').value,
+    max_lat: +document.getElementById('max-lat').value,
+    min_lon: +document.getElementById('min-lon').value,
+    max_lon: +document.getElementById('max-lon').value,
+  };
+  const opts = {
+    font_size:  document.getElementById('font-size').value,
+    dot_size:   document.getElementById('dot-size').value,
+    dot_color:  document.getElementById('dot-color').value,
+    text_color: document.getElementById('text-color').value,
+  };
+
+  const fd = new FormData();
+  fd.append('map',     mapFile);
+  fd.append('bounds',  JSON.stringify(bounds));
+  fd.append('places',  JSON.stringify(geocoded));
+  fd.append('options', JSON.stringify(opts));
+
+  try {
+    const res  = await fetch('/label', {method:'POST', body:fd});
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    generatedImg = data.image;
+    document.getElementById('preview-slot').innerHTML =
+      `<div class="preview-img-wrap"><img src="${data.image}" alt="labeled map"></div>`;
+
+    const skipNote = data.skipped && data.skipped.length
+      ? ` · ${data.skipped.length} skipped`
+      : '';
+    document.getElementById('stats-txt').textContent =
+      `${data.labeled} place${data.labeled !== 1 ? 's' : ''} labeled${skipNote}`;
+    document.getElementById('dl-row').style.display = 'flex';
+
+  } catch(err) {
+    alert('Error: ' + err.message);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Generate Labeled Map';
+  checkReady();
+}
+
+// ── Download ──────────────────────────────────────────────────────────────────
+function download() {
+  if (!generatedImg) return;
+  const a = document.createElement('a');
+  a.href     = generatedImg;
+  a.download = 'labeled_map.png';
+  a.click();
+}
+</script>
+</body>
+</html>
