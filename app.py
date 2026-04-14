@@ -4,7 +4,9 @@
 import base64
 import io
 import json
+import os
 import time
+from functools import lru_cache
 
 from flask import Flask, jsonify, render_template, request
 from geopy.exc import GeocoderServiceError, GeocoderTimedOut
@@ -12,6 +14,9 @@ from geopy.geocoders import Nominatim
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
+
+# Module-level geocoder instance — avoids recreating on every request
+_geolocator = Nominatim(user_agent="blank_map_labeler_v1")
 
 # ── Geocoding ──────────────────────────────────────────────────────────────────
 
@@ -25,6 +30,8 @@ def _geocode_one(geolocator, name: str) -> dict:
         return {"found": False, "error": "Timed out"}
     except GeocoderServiceError as exc:
         return {"found": False, "error": str(exc)}
+    except Exception as exc:
+        return {"found": False, "error": f"Unexpected error: {exc}"}
 
 
 # ── Image labeling ─────────────────────────────────────────────────────────────
@@ -38,6 +45,7 @@ _FONT_PATHS = [
 ]
 
 
+@lru_cache(maxsize=16)
 def _load_font(size: int):
     for path in _FONT_PATHS:
         try:
@@ -49,6 +57,8 @@ def _load_font(size: int):
 
 def _hex_rgba(hex_color: str, alpha: int = 255) -> tuple:
     h = hex_color.lstrip("#")
+    if len(h) != 6 or not all(c in "0123456789abcdefABCDEF" for c in h):
+        raise ValueError(f"Invalid hex color: {hex_color!r}")
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), alpha)
 
 
@@ -82,7 +92,8 @@ def _draw_labels(img_bytes: bytes, bounds: dict, places: dict, opts: dict) -> io
         x = int((lon - min_lon) / (max_lon - min_lon) * w)
         y = int((max_lat - lat) / (max_lat - min_lat) * h)
 
-        if not (0 <= x <= w and 0 <= y <= h):
+        # Use strict < to avoid off-by-one at image edges
+        if not (0 <= x < w and 0 <= y < h):
             skipped.append(f"{name} (outside bounds)")
             continue
 
@@ -119,10 +130,9 @@ def index():
 def geocode():
     data   = request.get_json(force=True)
     names  = [p.strip() for p in data.get("places", []) if p.strip()]
-    geo    = Nominatim(user_agent="blank_map_labeler_v1")
     result = {}
     for i, name in enumerate(names):
-        result[name] = _geocode_one(geo, name)
+        result[name] = _geocode_one(_geolocator, name)
         if i < len(names) - 1:
             time.sleep(1.1)          # Nominatim: 1 req/s
     return jsonify(result)
@@ -134,16 +144,34 @@ def label():
     if not map_file:
         return jsonify({"error": "No map file"}), 400
 
-    bounds = json.loads(request.form["bounds"])
-    places = json.loads(request.form["places"])
-    opts   = json.loads(request.form.get("options", "{}"))
+    try:
+        bounds = json.loads(request.form["bounds"])
+        places = json.loads(request.form["places"])
+        opts   = json.loads(request.form.get("options", "{}"))
+    except (KeyError, json.JSONDecodeError) as exc:
+        return jsonify({"error": f"Invalid request data: {exc}"}), 400
 
-    out, labeled, skipped = _draw_labels(map_file.read(), bounds, places, opts)
+    # Validate bounds ordering to prevent division by zero and inverted axes
+    try:
+        if bounds["min_lat"] >= bounds["max_lat"]:
+            return jsonify({"error": "min_lat must be less than max_lat"}), 400
+        if bounds["min_lon"] >= bounds["max_lon"]:
+            return jsonify({"error": "min_lon must be less than max_lon"}), 400
+    except (KeyError, TypeError) as exc:
+        return jsonify({"error": f"Invalid bounds: {exc}"}), 400
+
+    try:
+        out, labeled, skipped = _draw_labels(map_file.read(), bounds, places, opts)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Image processing error: {exc}"}), 500
+
     img_b64 = "data:image/png;base64," + base64.b64encode(out.getvalue()).decode()
-
     return jsonify({"image": img_b64, "labeled": labeled, "skipped": skipped})
 
 
 if __name__ == "__main__":
+    debug = os.environ.get("FLASK_DEBUG", "").lower() == "true"
     print("Map Labeler running at http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(debug=debug, port=5000)

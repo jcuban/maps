@@ -317,6 +317,7 @@ async function geocodePlaces() {
       headers: {'Content-Type':'application/json'},
       body:    JSON.stringify({places}),
     });
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
     const data = await res.json();
     // Merge with any existing manual entries
     for (const [k, v] of Object.entries(data)) {
@@ -324,8 +325,12 @@ async function geocodePlaces() {
     }
     renderPlaces();
   } catch(err) {
-    document.getElementById('geo-status').innerHTML =
-      `<div class="warn">Geocoding error: ${err.message}</div>`;
+    const errEl = document.getElementById('geo-status');
+    errEl.textContent = '';
+    const div = document.createElement('div');
+    div.className = 'warn';
+    div.textContent = `Geocoding error: ${err.message}`;
+    errEl.appendChild(div);
   }
 
   btn.disabled = false;
@@ -346,11 +351,11 @@ function renderPlaces() {
   const items = entries.map(([name, data]) => {
     const dot    = data.found ? 'dot-ok' : 'dot-miss';
     const coords = data.found ? `${data.lat.toFixed(2)}, ${data.lon.toFixed(2)}` : 'not found';
-    const manBtn = data.found ? '' : `<button class="btn btn-ghost btn-xs" onclick="promptManual('${esc(name)}')">Set coords</button>`;
-    const delBtn = `<button class="btn btn-ghost btn-xs" onclick="removeName('${esc(name)}')" title="Remove">✕</button>`;
+    const manBtn = data.found ? '' : `<button class="btn btn-ghost btn-xs" data-action="manual" data-name="${esc(name)}">Set coords</button>`;
+    const delBtn = `<button class="btn btn-ghost btn-xs" data-action="remove" data-name="${esc(name)}" title="Remove">✕</button>`;
     return `<div class="place-item">
       <span class="dot ${dot}"></span>
-      <span class="place-name" title="${esc(name)}">${name}</span>
+      <span class="place-name" title="${esc(name)}">${esc(name)}</span>
       <span class="place-coords">${coords}</span>
       ${manBtn}${delBtn}
     </div>`;
@@ -362,7 +367,14 @@ function renderPlaces() {
   document.getElementById('b3').classList.toggle('ok', found > 0);
 }
 
-function esc(s) { return s.replace(/'/g,"&#39;").replace(/"/g,'&quot;'); }
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function removeName(name) {
   delete geocoded[name];
@@ -441,6 +453,10 @@ async function generate() {
 
   try {
     const res  = await fetch('/label', {method:'POST', body:fd});
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Server error: ${res.status}`);
+    }
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
@@ -472,6 +488,15 @@ function download() {
   a.download = 'labeled_map.png';
   a.click();
 }
+
+// ── Place-list event delegation (replaces unsafe inline onclick handlers) ─────
+document.getElementById('place-list').addEventListener('click', e => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const name = btn.dataset.name;
+  if (btn.dataset.action === 'manual') promptManual(name);
+  else if (btn.dataset.action === 'remove') removeName(name);
+});
 </script>
 </body>
 </html>
